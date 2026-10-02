@@ -64,6 +64,15 @@ app.get("/", (req, res) => {
     });
 });
 
+app.get("/recipes", (req, res) => {
+    const recipes = readRecipes();
+
+    res.json({
+        success: true,
+        count: recipes.length,
+        recipes
+    });
+});
 
 // --------------------------------------------------
 // GET ALL RECIPES
