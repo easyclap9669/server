@@ -5,7 +5,8 @@ const path = require("path");
 
 const app = express();
 
-const PORT = 3000;
+// Render provides PORT automatically
+const PORT = process.env.PORT || 3000;
 
 const DATA_FILE = path.join(__dirname, "recipes.json");
 
@@ -13,9 +14,9 @@ app.use(cors());
 app.use(express.json());
 
 
-// --------------------------------------------------
-// READ JSON DATA
-// --------------------------------------------------
+// ======================================================
+// READ RECIPES
+// ======================================================
 
 function readRecipes() {
     try {
@@ -31,9 +32,9 @@ function readRecipes() {
 }
 
 
-// --------------------------------------------------
-// WRITE JSON DATA
-// --------------------------------------------------
+// ======================================================
+// WRITE RECIPES
+// ======================================================
 
 function writeRecipes(data) {
     try {
@@ -46,15 +47,14 @@ function writeRecipes(data) {
         return true;
     } catch (error) {
         console.error("Error writing recipes.json:", error);
-
         return false;
     }
 }
 
 
-// --------------------------------------------------
+// ======================================================
 // HOME
-// --------------------------------------------------
+// ======================================================
 
 app.get("/", (req, res) => {
     res.json({
@@ -64,19 +64,10 @@ app.get("/", (req, res) => {
     });
 });
 
-app.get("/recipes", (req, res) => {
-    const recipes = readRecipes();
 
-    res.json({
-        success: true,
-        count: recipes.length,
-        recipes
-    });
-});
-
-// --------------------------------------------------
-// GET ALL RECIPES
-// --------------------------------------------------
+// ======================================================
+// GET RECIPES
+// ======================================================
 
 app.get("/recipes", (req, res) => {
 
@@ -93,19 +84,26 @@ app.get("/recipes", (req, res) => {
         const searchText = search.toLowerCase();
 
         recipes = recipes.filter(recipe =>
-            recipe.title.toLowerCase().includes(searchText) ||
-            recipe.description.toLowerCase().includes(searchText)
+            String(recipe.title || "")
+                .toLowerCase()
+                .includes(searchText) ||
+
+            String(recipe.description || "")
+                .toLowerCase()
+                .includes(searchText)
         );
     }
 
-    // Filter tag
+    // Tag filter
     if (tag) {
 
         const tagText = tag.toLowerCase();
 
         recipes = recipes.filter(recipe =>
+            Array.isArray(recipe.tags) &&
             recipe.tags.some(recipeTag =>
-                recipeTag.toLowerCase() === tagText
+                String(recipeTag)
+                    .toLowerCase() === tagText
             )
         );
     }
@@ -118,9 +116,9 @@ app.get("/recipes", (req, res) => {
 });
 
 
-// --------------------------------------------------
+// ======================================================
 // GET RECIPE BY ID
-// --------------------------------------------------
+// ======================================================
 
 app.get("/recipes/:id", (req, res) => {
 
@@ -128,12 +126,11 @@ app.get("/recipes/:id", (req, res) => {
 
     const id = Number(req.params.id);
 
-    const recipe = data.recipes.find(
+    const recipe = (data.recipes || []).find(
         recipe => recipe.id === id
     );
 
     if (!recipe) {
-
         return res.status(404).json({
             success: false,
             message: "Recipe not found"
@@ -147,62 +144,44 @@ app.get("/recipes/:id", (req, res) => {
 });
 
 
-// --------------------------------------------------
+// ======================================================
 // CREATE RECIPE
-// --------------------------------------------------
+// ======================================================
 
 app.post("/recipes", (req, res) => {
 
     const data = readRecipes();
 
+    const recipes = data.recipes || [];
+
     const newRecipe = req.body;
 
     if (!newRecipe.title) {
-
         return res.status(400).json({
             success: false,
             message: "Recipe title is required"
         });
     }
 
-    const recipes = data.recipes || [];
-
     const newId =
         recipes.length > 0
             ? Math.max(...recipes.map(recipe => recipe.id)) + 1
             : 1;
 
-    newRecipe.id = newId;
+    const recipe = {
+        id: newId,
+        title: newRecipe.title,
+        description: newRecipe.description || "",
+        imageUrl: newRecipe.imageUrl || "",
+        servings: newRecipe.servings || 1,
+        cookingTime: newRecipe.cookingTime || 0,
+        tags: newRecipe.tags || [],
+        ingredients: newRecipe.ingredients || [],
+        steps: newRecipe.steps || [],
+        favorite: false
+    };
 
-    if (!newRecipe.description) {
-        newRecipe.description = "";
-    }
-
-    if (!newRecipe.imageUrl) {
-        newRecipe.imageUrl = "";
-    }
-
-    if (!newRecipe.servings) {
-        newRecipe.servings = 1;
-    }
-
-    if (!newRecipe.cookingTime) {
-        newRecipe.cookingTime = 0;
-    }
-
-    if (!newRecipe.tags) {
-        newRecipe.tags = [];
-    }
-
-    if (!newRecipe.ingredients) {
-        newRecipe.ingredients = [];
-    }
-
-    if (!newRecipe.steps) {
-        newRecipe.steps = [];
-    }
-
-    recipes.push(newRecipe);
+    recipes.push(recipe);
 
     data.recipes = recipes;
 
@@ -211,14 +190,14 @@ app.post("/recipes", (req, res) => {
     res.status(201).json({
         success: true,
         message: "Recipe created successfully",
-        recipe: newRecipe
+        recipe: recipe
     });
 });
 
 
-// --------------------------------------------------
+// ======================================================
 // UPDATE RECIPE
-// --------------------------------------------------
+// ======================================================
 
 app.put("/recipes/:id", (req, res) => {
 
@@ -226,39 +205,40 @@ app.put("/recipes/:id", (req, res) => {
 
     const id = Number(req.params.id);
 
-    const index = data.recipes.findIndex(
+    const recipes = data.recipes || [];
+
+    const index = recipes.findIndex(
         recipe => recipe.id === id
     );
 
     if (index === -1) {
-
         return res.status(404).json({
             success: false,
             message: "Recipe not found"
         });
     }
 
-    const updatedRecipe = {
-        ...data.recipes[index],
+    recipes[index] = {
+        ...recipes[index],
         ...req.body,
         id: id
     };
 
-    data.recipes[index] = updatedRecipe;
+    data.recipes = recipes;
 
     writeRecipes(data);
 
     res.json({
         success: true,
         message: "Recipe updated successfully",
-        recipe: updatedRecipe
+        recipe: recipes[index]
     });
 });
 
 
-// --------------------------------------------------
+// ======================================================
 // DELETE RECIPE
-// --------------------------------------------------
+// ======================================================
 
 app.delete("/recipes/:id", (req, res) => {
 
@@ -266,21 +246,24 @@ app.delete("/recipes/:id", (req, res) => {
 
     const id = Number(req.params.id);
 
-    const index = data.recipes.findIndex(
+    const recipes = data.recipes || [];
+
+    const index = recipes.findIndex(
         recipe => recipe.id === id
     );
 
     if (index === -1) {
-
         return res.status(404).json({
             success: false,
             message: "Recipe not found"
         });
     }
 
-    const deletedRecipe = data.recipes[index];
+    const deletedRecipe = recipes[index];
 
-    data.recipes.splice(index, 1);
+    recipes.splice(index, 1);
+
+    data.recipes = recipes;
 
     writeRecipes(data);
 
@@ -292,9 +275,9 @@ app.delete("/recipes/:id", (req, res) => {
 });
 
 
-// --------------------------------------------------
-// FAVORITE RECIPE
-// --------------------------------------------------
+// ======================================================
+// FAVORITE
+// ======================================================
 
 app.post("/recipes/:id/favorite", (req, res) => {
 
@@ -302,12 +285,13 @@ app.post("/recipes/:id/favorite", (req, res) => {
 
     const id = Number(req.params.id);
 
-    const recipe = data.recipes.find(
+    const recipes = data.recipes || [];
+
+    const recipe = recipes.find(
         recipe => recipe.id === id
     );
 
     if (!recipe) {
-
         return res.status(404).json({
             success: false,
             message: "Recipe not found"
@@ -316,28 +300,27 @@ app.post("/recipes/:id/favorite", (req, res) => {
 
     recipe.favorite = !recipe.favorite;
 
+    data.recipes = recipes;
+
     writeRecipes(data);
 
     res.json({
         success: true,
-        message: recipe.favorite
-            ? "Recipe added to favorites"
-            : "Recipe removed from favorites",
         favorite: recipe.favorite,
         recipe: recipe
     });
 });
 
 
-// --------------------------------------------------
-// GET FAVORITE RECIPES
-// --------------------------------------------------
+// ======================================================
+// FAVORITES
+// ======================================================
 
 app.get("/favorites", (req, res) => {
 
     const data = readRecipes();
 
-    const favorites = data.recipes.filter(
+    const favorites = (data.recipes || []).filter(
         recipe => recipe.favorite === true
     );
 
@@ -349,9 +332,9 @@ app.get("/favorites", (req, res) => {
 });
 
 
-// --------------------------------------------------
+// ======================================================
 // SHOPPING LIST
-// --------------------------------------------------
+// ======================================================
 
 let shoppingList = [];
 
@@ -375,7 +358,6 @@ app.post("/shopping-list", (req, res) => {
     const item = req.body;
 
     if (!item.name) {
-
         return res.status(400).json({
             success: false,
             message: "Item name is required"
@@ -385,7 +367,9 @@ app.post("/shopping-list", (req, res) => {
     const newItem = {
         id:
             shoppingList.length > 0
-                ? Math.max(...shoppingList.map(item => item.id)) + 1
+                ? Math.max(
+                    ...shoppingList.map(item => item.id)
+                ) + 1
                 : 1,
 
         name: item.name,
@@ -416,7 +400,6 @@ app.put("/shopping-list/:id", (req, res) => {
     );
 
     if (index === -1) {
-
         return res.status(404).json({
             success: false,
             message: "Shopping item not found"
@@ -447,7 +430,6 @@ app.delete("/shopping-list/:id", (req, res) => {
     );
 
     if (index === -1) {
-
         return res.status(404).json({
             success: false,
             message: "Shopping item not found"
@@ -466,9 +448,9 @@ app.delete("/shopping-list/:id", (req, res) => {
 });
 
 
-// --------------------------------------------------
+// ======================================================
 // ADD RECIPE INGREDIENTS TO SHOPPING LIST
-// --------------------------------------------------
+// ======================================================
 
 app.post("/shopping-list/recipe/:id", (req, res) => {
 
@@ -476,29 +458,32 @@ app.post("/shopping-list/recipe/:id", (req, res) => {
 
     const id = Number(req.params.id);
 
-    const recipe = data.recipes.find(
+    const recipe = (data.recipes || []).find(
         recipe => recipe.id === id
     );
 
     if (!recipe) {
-
         return res.status(404).json({
             success: false,
             message: "Recipe not found"
         });
     }
 
-    recipe.ingredients.forEach(ingredient => {
+    const ingredients = recipe.ingredients || [];
+
+    ingredients.forEach(ingredient => {
 
         const newItem = {
             id:
                 shoppingList.length > 0
-                    ? Math.max(...shoppingList.map(item => item.id)) + 1
+                    ? Math.max(
+                        ...shoppingList.map(item => item.id)
+                    ) + 1
                     : 1,
 
-            name: ingredient.name,
+            name: ingredient.name || "",
 
-            amount: ingredient.amount,
+            amount: ingredient.amount || "",
 
             checked: false
         };
@@ -514,39 +499,29 @@ app.post("/shopping-list/recipe/:id", (req, res) => {
 });
 
 
-// --------------------------------------------------
+// ======================================================
 // 404
-// --------------------------------------------------
+// ======================================================
 
 app.use((req, res) => {
 
     res.status(404).json({
         success: false,
-        message: "API endpoint not found"
+        message: "API endpoint not found",
+        path: req.originalUrl
     });
 });
 
 
-// --------------------------------------------------
+// ======================================================
 // START SERVER
-// --------------------------------------------------
+// ======================================================
 
 app.listen(PORT, "0.0.0.0", () => {
 
-    console.log("");
     console.log("====================================");
     console.log("       RecipeBox API Server");
     console.log("====================================");
     console.log(`Server running on port ${PORT}`);
-    console.log("");
-    console.log("Local:");
-    console.log(`http://localhost:${PORT}`);
-    console.log("");
-    console.log("Android Emulator:");
-    console.log(`http://localhost:${PORT}`);
-    console.log("");
-    console.log("Recipes:");
-    console.log(`http://localhost:${PORT}/recipes`);
-    console.log("");
     console.log("====================================");
 });
