@@ -15,15 +15,15 @@ app.use(cors());
 app.use(express.json());
 
 // =====================================================
-// DATABASE CONFIGURATION
+// AIVEN MYSQL CONNECTION
 // =====================================================
 
-const dbConfig = {
+const pool = mysql.createPool({
   host: process.env.DB_HOST,
-  port: Number(process.env.DB_PORT || 27123),
+  port: Number(process.env.DB_PORT),
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME || "defaultdb",
+  database: process.env.DB_NAME,
 
   ssl: {
     rejectUnauthorized: false,
@@ -33,46 +33,7 @@ const dbConfig = {
   connectionLimit: 10,
   queueLimit: 0,
   connectTimeout: 20000,
-};
-
-// Create MySQL pool
-const pool = mysql.createPool(dbConfig);
-
-// =====================================================
-// INITIALIZE DATABASE
-// =====================================================
-
-async function initializeDatabase() {
-  try {
-    console.log("Connecting to Aiven MySQL...");
-
-    const connection = await pool.getConnection();
-
-    console.log("MySQL connection successful.");
-
-    await connection.query(`
-      CREATE TABLE IF NOT EXISTS recipes (
-        id INT NOT NULL AUTO_INCREMENT,
-        title VARCHAR(255) NOT NULL,
-        description TEXT,
-        imageUrl TEXT,
-        servings INT DEFAULT 1,
-        cookingTime INT DEFAULT 0,
-        tags VARCHAR(500),
-        PRIMARY KEY (id)
-      )
-    `);
-
-    connection.release();
-
-    console.log("Recipes table is ready.");
-  } catch (error) {
-    console.error("DATABASE INITIALIZATION ERROR");
-    console.error("Message:", error.message);
-    console.error("Code:", error.code);
-    console.error("SQL State:", error.sqlState);
-  }
-}
+});
 
 // =====================================================
 // ROOT
@@ -82,26 +43,33 @@ app.get("/", (req, res) => {
   res.json({
     success: true,
     message: "RecipeBox API is running",
-    database: "Aiven MySQL",
   });
 });
 
 // =====================================================
-// HEALTH
+// TEST AIVEN DATABASE CONNECTION
 // =====================================================
 
 app.get("/health", async (req, res) => {
+  let connection;
+
   try {
-    const [rows] = await pool.query("SELECT 1 AS result");
+    connection = await pool.getConnection();
+
+    const [rows] = await connection.query(
+      "SELECT 1 AS result"
+    );
 
     res.json({
       success: true,
       server: "online",
-      database: "connected",
+      database: "Aiven MySQL connected",
       result: rows[0].result,
     });
+
   } catch (error) {
-    console.error("HEALTH ERROR:", error);
+    console.error("AIVEN CONNECTION ERROR:");
+    console.error(error);
 
     res.status(500).json({
       success: false,
@@ -111,24 +79,32 @@ app.get("/health", async (req, res) => {
       code: error.code || null,
       sqlState: error.sqlState || null,
     });
+
+  } finally {
+    if (connection) {
+      connection.release();
+    }
   }
 });
 
 // =====================================================
-// DATABASE TEST
+// TEST DATABASE
 // =====================================================
 
 app.get("/test-db", async (req, res) => {
   try {
-    const [rows] = await pool.query("SELECT 1 + 2 AS result");
+    const [rows] = await pool.query(
+      "SELECT 1 + 2 AS result"
+    );
 
     res.json({
       success: true,
       message: "Successfully connected to Aiven MySQL",
       data: rows[0],
     });
+
   } catch (error) {
-    console.error("TEST DB ERROR:", error);
+    console.error("DATABASE TEST ERROR:", error);
 
     res.status(500).json({
       success: false,
@@ -140,19 +116,22 @@ app.get("/test-db", async (req, res) => {
 });
 
 // =====================================================
-// TABLES
+// SHOW DATABASE TABLES
 // =====================================================
 
 app.get("/api/tables", async (req, res) => {
   try {
-    const [tables] = await pool.query("SHOW TABLES");
+    const [tables] = await pool.query(
+      "SHOW TABLES"
+    );
 
     res.json({
       success: true,
       tables,
     });
+
   } catch (error) {
-    console.error("TABLE ERROR:", error);
+    console.error("SHOW TABLES ERROR:", error);
 
     res.status(500).json({
       success: false,
@@ -168,7 +147,8 @@ app.get("/api/tables", async (req, res) => {
 
 app.get("/api/recipes", async (req, res) => {
   try {
-    const [recipes] = await pool.query(`
+    const [recipes] = await pool.query(
+      `
       SELECT
         id,
         title,
@@ -179,15 +159,18 @@ app.get("/api/recipes", async (req, res) => {
         tags
       FROM recipes
       ORDER BY id ASC
-    `);
+      `
+    );
 
     res.json({
       success: true,
       count: recipes.length,
-      recipes: recipes,
+      recipes,
     });
+
   } catch (error) {
-    console.error("GET RECIPES ERROR:", error);
+    console.error("GET RECIPES ERROR:");
+    console.error(error);
 
     res.status(500).json({
       success: false,
@@ -240,8 +223,10 @@ app.get("/api/recipes/:id", async (req, res) => {
       success: true,
       recipe: recipes[0],
     });
+
   } catch (error) {
-    console.error("GET RECIPE ERROR:", error);
+    console.error("GET RECIPE ERROR:");
+    console.error(error);
 
     res.status(500).json({
       success: false,
@@ -297,7 +282,7 @@ app.post("/api/recipes", async (req, res) => {
       ]
     );
 
-    const [newRecipe] = await pool.query(
+    const [recipes] = await pool.query(
       "SELECT * FROM recipes WHERE id = ?",
       [result.insertId]
     );
@@ -305,10 +290,12 @@ app.post("/api/recipes", async (req, res) => {
     res.status(201).json({
       success: true,
       message: "Recipe created successfully",
-      recipe: newRecipe[0],
+      recipe: recipes[0],
     });
+
   } catch (error) {
-    console.error("CREATE RECIPE ERROR:", error);
+    console.error("CREATE RECIPE ERROR:");
+    console.error(error);
 
     res.status(500).json({
       success: false,
@@ -326,6 +313,13 @@ app.post("/api/recipes", async (req, res) => {
 app.put("/api/recipes/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
+
+    if (!Number.isInteger(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid recipe ID",
+      });
+    }
 
     const {
       title,
@@ -381,8 +375,10 @@ app.put("/api/recipes/:id", async (req, res) => {
       message: "Recipe updated successfully",
       recipe: updated[0],
     });
+
   } catch (error) {
-    console.error("UPDATE RECIPE ERROR:", error);
+    console.error("UPDATE RECIPE ERROR:");
+    console.error(error);
 
     res.status(500).json({
       success: false,
@@ -401,6 +397,13 @@ app.delete("/api/recipes/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
 
+    if (!Number.isInteger(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid recipe ID",
+      });
+    }
+
     const [result] = await pool.query(
       "DELETE FROM recipes WHERE id = ?",
       [id]
@@ -417,8 +420,10 @@ app.delete("/api/recipes/:id", async (req, res) => {
       success: true,
       message: "Recipe deleted successfully",
     });
+
   } catch (error) {
-    console.error("DELETE RECIPE ERROR:", error);
+    console.error("DELETE RECIPE ERROR:");
+    console.error(error);
 
     res.status(500).json({
       success: false,
@@ -430,7 +435,7 @@ app.delete("/api/recipes/:id", async (req, res) => {
 });
 
 // =====================================================
-// 404 HANDLER
+// 404
 // =====================================================
 
 app.use((req, res) => {
@@ -447,19 +452,13 @@ app.use((req, res) => {
 
 const PORT = Number(process.env.PORT) || 5000;
 
-async function startServer() {
-  await initializeDatabase();
-
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log("--------------------------------------");
-    console.log("RecipeBox API");
-    console.log("--------------------------------------");
-    console.log("Server running on port ${PORT}");
-    console.log("Host: 0.0.0.0");
-    console.log("Database: Aiven MySQL");
-    console.log("--------------------------------------");
-  });
-}
-
-startServer();
+app.listen(PORT, "0.0.0.0", () => {
+  console.log("--------------------------------------");
+  console.log("RecipeBox API");
+  console.log("--------------------------------------");
+  console.log(`Server running on port ${PORT}`);
+  console.log("Host: 0.0.0.0");
+  console.log("Database: Aiven MySQL");
+  console.log("--------------------------------------");
+});
 
