@@ -2,6 +2,8 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const fs = require("fs");
+const path = require("path");
 
 const app = express();
 
@@ -9,6 +11,7 @@ const app = express();
 // CONFIG
 // ================================
 const PORT = process.env.PORT || 3000;
+const RECIPES_FILE = path.join(__dirname, "recipes.json");
 
 // ================================
 // MIDDLEWARE
@@ -17,51 +20,77 @@ app.use(cors());
 app.use(express.json());
 
 // ================================
-// LOAD RECIPES JSON
+// LOAD RECIPES
 // ================================
-let recipesData;
+function loadRecipes() {
+    try {
+        const file = fs.readFileSync(RECIPES_FILE, "utf8");
+        const json = JSON.parse(file);
 
-try {
-    recipesData = require("./recipes.json");
+        // Support:
+// {
+//   "success": true,
+//   "data": [...]
+//
+// OR
+// [
+//   {...},
+//   {...}
+// ]
 
-    console.log("Recipes JSON loaded successfully.");
-    console.log(`Total recipes: ${recipesData.data.length}`);
-} catch (error) {
-    console.error("Failed to load recipes.json:", error.message);
+        if (Array.isArray(json)) {
+            return json;
+        }
 
-    recipesData = {
-        success: false,
-        data: []
-    };
+        if (Array.isArray(json.data)) {
+            return json.data;
+        }
+
+        console.error("recipes.json does not contain a valid data array.");
+        return [];
+    } catch (error) {
+        console.error("Failed to load recipes.json:", error.message);
+        return [];
+    }
 }
 
 // ================================
 // HOME
 // ================================
 app.get("/", (req, res) => {
+    const recipes = loadRecipes();
+
     res.json({
         success: true,
         server: "online",
+        database: false,
+        source: "recipes.json",
         message: "RecipeBox API is running",
         version: "1.0.0",
+        recipeCount: recipes.length,
         endpoints: {
             allRecipes: "GET /recipes",
             recipeById: "GET /recipes/:id",
             search: "GET /recipes?q=chicken",
             tag: "GET /recipes?tag=dinner",
+            tags: "GET /tags",
             health: "GET /health"
         }
     });
 });
 
 // ================================
-// HEALTH CHECK
+// HEALTH
 // ================================
 app.get("/health", (req, res) => {
+    const recipes = loadRecipes();
+
     res.json({
         success: true,
         server: "online",
-        recipes: recipesData.data.length
+        database: false,
+        source: "recipes.json",
+        recipes: recipes.length
     });
 });
 
@@ -71,31 +100,42 @@ app.get("/health", (req, res) => {
 // ================================
 app.get("/recipes", (req, res) => {
     try {
-        let recipes = [...recipesData.data];
+        let recipes = loadRecipes();
 
         const { q, tag } = req.query;
 
-        // ----------------------------
+        // ============================
         // SEARCH
         // /recipes?q=chicken
-        // ----------------------------
+        // ============================
         if (q) {
             const search = q.toLowerCase().trim();
 
             recipes = recipes.filter((recipe) => {
-                const title = recipe.title?.toLowerCase() || "";
-                const description = recipe.description?.toLowerCase() || "";
+                const title =
+                    recipe.title?.toLowerCase() || "";
 
-                const recipeTags = Array.isArray(recipe.tags)
-                    ? recipe.tags.join(" ").toLowerCase()
-                    : "";
+                const description =
+                    recipe.description?.toLowerCase() || "";
 
-                const ingredients = Array.isArray(recipe.ingredients)
-                    ? recipe.ingredients
-                        .map((ingredient) => ingredient.name)
-                        .join(" ")
-                        .toLowerCase()
-                    : "";
+                const recipeTags =
+                    Array.isArray(recipe.tags)
+                        ? recipe.tags.join(" ").toLowerCase()
+                        : "";
+
+                const ingredients =
+                    Array.isArray(recipe.ingredients)
+                        ? recipe.ingredients
+                            .map((ingredient) => {
+                                if (typeof ingredient === "string") {
+                                    return ingredient;
+                                }
+
+                                return ingredient.name || "";
+                            })
+                            .join(" ")
+                            .toLowerCase()
+                        : "";
 
                 return (
                     title.includes(search) ||
@@ -106,19 +146,23 @@ app.get("/recipes", (req, res) => {
             });
         }
 
-        // ----------------------------
+        // ============================
         // FILTER BY TAG
-        // /recipes?tag=Dinner
-        // ----------------------------
+        // /recipes?tag=dinner
+        // ============================
         if (tag) {
             const searchTag = tag.toLowerCase().trim();
 
             recipes = recipes.filter((recipe) => {
-                return Array.isArray(recipe.tags) &&
+                return (
+                    Array.isArray(recipe.tags) &&
                     recipe.tags.some(
                         (recipeTag) =>
-                            recipeTag.toLowerCase() === searchTag
-                    );
+                            String(recipeTag)
+                                .toLowerCase()
+                                .trim() === searchTag
+                    )
+                );
             });
         }
 
@@ -145,6 +189,7 @@ app.get("/recipes", (req, res) => {
 // ================================
 app.get("/recipes/:id", (req, res) => {
     try {
+        const recipes = loadRecipes();
         const id = Number(req.params.id);
 
         if (Number.isNaN(id)) {
@@ -154,15 +199,15 @@ app.get("/recipes/:id", (req, res) => {
             });
         }
 
-        const recipe = recipesData.data.find(
-            (item) => item.id === id
+        const recipe = recipes.find(
+            (item) => Number(item.id) === id
         );
 
         if (!recipe) {
             return res.status(404).json({
                 success: false,
                 message: "Recipe not found",
-                id: id
+                id
             });
         }
 
@@ -188,19 +233,19 @@ app.get("/recipes/:id", (req, res) => {
 // ================================
 app.get("/tags", (req, res) => {
     try {
-        const tags = [];
+        const recipes = loadRecipes();
 
-        recipesData.data.forEach((recipe) => {
+        const tagSet = new Set();
+
+        recipes.forEach((recipe) => {
             if (Array.isArray(recipe.tags)) {
                 recipe.tags.forEach((tag) => {
-                    if (!tags.includes(tag)) {
-                        tags.push(tag);
-                    }
+                    tagSet.add(String(tag));
                 });
             }
         });
 
-        tags.sort();
+        const tags = [...tagSet].sort();
 
         res.json({
             success: true,
@@ -209,6 +254,8 @@ app.get("/tags", (req, res) => {
         });
 
     } catch (error) {
+        console.error("GET /tags error:", error);
+
         res.status(500).json({
             success: false,
             message: "Failed to get tags",
@@ -218,7 +265,7 @@ app.get("/tags", (req, res) => {
 });
 
 // ================================
-// 404 ROUTE
+// 404
 // ================================
 app.use((req, res) => {
     res.status(404).json({
@@ -249,8 +296,9 @@ app.listen(PORT, "0.0.0.0", () => {
     console.log("RecipeBox API Server");
     console.log("=================================");
     console.log(`Server running on port ${PORT}`);
-    console.log(`Local: http://localhost:${PORT}`);
     console.log(`Recipes: http://localhost:${PORT}/recipes`);
     console.log(`Health: http://localhost:${PORT}/health`);
+    console.log("Data source: recipes.json");
+    console.log("Database: NONE");
     console.log("=================================");
 });
