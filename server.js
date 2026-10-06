@@ -21,7 +21,11 @@ const PORT = Number(process.env.PORT) || 3000;
 // DATABASE CONFIGURATION
 // ======================================================
 
-
+const DB_HOST = process.env.DB_HOST || "mysql-14d78de5-recipebox.l.aivencloud.com";
+const DB_PORT = Number(process.env.DB_PORT) || 27123;
+const DB_USER = process.env.DB_USER || "avnadmin";
+const dbPassword = process.env.AIVEN_DB_PASSWORD;
+const DB_NAME = process.env.DB_NAME || "defaultdb";
 
 // ======================================================
 // DATABASE CONFIG LOG
