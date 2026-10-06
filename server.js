@@ -2,300 +2,255 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
-const mysql = require("mysql2/promise");
 
 const app = express();
 
+// ================================
+// CONFIG
+// ================================
+const PORT = process.env.PORT || 3000;
+
+// ================================
+// MIDDLEWARE
+// ================================
 app.use(cors());
 app.use(express.json());
 
-// =====================================
-// AIVEN MYSQL CONNECTION
-// =====================================
+// ================================
+// LOAD RECIPES JSON
+// ================================
+let recipesData;
 
-const db = mysql.createPool({
-    host: process.env.DB_HOST,
-    port: Number(process.env.DB_PORT),
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: "defaultdb",
+try {
+    recipesData = require("./recipes.json");
 
-    ssl: {
-        rejectUnauthorized: false
-    },
+    console.log("Recipes JSON loaded successfully.");
+    console.log(`Total recipes: ${recipesData.data.length}`);
+} catch (error) {
+    console.error("Failed to load recipes.json:", error.message);
 
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
-});
+    recipesData = {
+        success: false,
+        data: []
+    };
+}
 
-// =====================================
+// ================================
 // HOME
-// =====================================
-
-app.get("/", async (req, res) => {
+// ================================
+app.get("/", (req, res) => {
     res.json({
         success: true,
         server: "online",
-        database: "defaultdb",
-        message: "RecipeBox server is running"
+        message: "RecipeBox API is running",
+        version: "1.0.0",
+        endpoints: {
+            allRecipes: "GET /recipes",
+            recipeById: "GET /recipes/:id",
+            search: "GET /recipes?q=chicken",
+            tag: "GET /recipes?tag=dinner",
+            health: "GET /health"
+        }
     });
 });
 
-// =====================================
-// DATABASE TEST
-// =====================================
-
-app.get("/health", async (req, res) => {
-    try {
-        const [rows] = await db.query("SELECT 1 AS connected");
-
-        res.json({
-            success: true,
-            server: "online",
-            database: "connected",
-            databaseName: "defaultdb",
-            result: rows
-        });
-    } catch (error) {
-        console.error("Aiven MySQL error:", error);
-
-        res.status(500).json({
-            success: false,
-            server: "online",
-            database: "disconnected",
-            databaseName: "defaultdb",
-            error: error.message,
-            code: error.code || null
-        });
-    }
+// ================================
+// HEALTH CHECK
+// ================================
+app.get("/health", (req, res) => {
+    res.json({
+        success: true,
+        server: "online",
+        recipes: recipesData.data.length
+    });
 });
 
-// =====================================
+// ================================
 // GET ALL RECIPES
-// =====================================
-
-app.get("/recipes", async (req, res) => {
+// GET /recipes
+// ================================
+app.get("/recipes", (req, res) => {
     try {
-        const [recipes] = await db.query(
-            "SELECT * FROM recipes ORDER BY id DESC"
-        );
+        let recipes = [...recipesData.data];
 
-        res.json({
-            success: true,
-            recipes
-        });
-    } catch (error) {
-        console.error("Recipes error:", error);
+        const { q, tag } = req.query;
 
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
+        // ----------------------------
+        // SEARCH
+        // /recipes?q=chicken
+        // ----------------------------
+        if (q) {
+            const search = q.toLowerCase().trim();
 
-// =====================================
-// GET ONE RECIPE
-// =====================================
+            recipes = recipes.filter((recipe) => {
+                const title = recipe.title?.toLowerCase() || "";
+                const description = recipe.description?.toLowerCase() || "";
 
-app.get("/recipes/:id", async (req, res) => {
-    try {
-        const { id } = req.params;
+                const recipeTags = Array.isArray(recipe.tags)
+                    ? recipe.tags.join(" ").toLowerCase()
+                    : "";
 
-        const [recipes] = await db.query(
-            "SELECT * FROM recipes WHERE id = ?",
-            [id]
-        );
+                const ingredients = Array.isArray(recipe.ingredients)
+                    ? recipe.ingredients
+                        .map((ingredient) => ingredient.name)
+                        .join(" ")
+                        .toLowerCase()
+                    : "";
 
-        if (recipes.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: "Recipe not found"
+                return (
+                    title.includes(search) ||
+                    description.includes(search) ||
+                    recipeTags.includes(search) ||
+                    ingredients.includes(search)
+                );
+            });
+        }
+
+        // ----------------------------
+        // FILTER BY TAG
+        // /recipes?tag=Dinner
+        // ----------------------------
+        if (tag) {
+            const searchTag = tag.toLowerCase().trim();
+
+            recipes = recipes.filter((recipe) => {
+                return Array.isArray(recipe.tags) &&
+                    recipe.tags.some(
+                        (recipeTag) =>
+                            recipeTag.toLowerCase() === searchTag
+                    );
             });
         }
 
         res.json({
             success: true,
-            recipe: recipes[0]
+            count: recipes.length,
+            data: recipes
         });
+
     } catch (error) {
-        console.error("Recipe error:", error);
+        console.error("GET /recipes error:", error);
 
         res.status(500).json({
             success: false,
+            message: "Failed to get recipes",
             error: error.message
         });
     }
 });
 
-// =====================================
-// CREATE RECIPE
-// =====================================
-
-app.post("/recipes", async (req, res) => {
+// ================================
+// GET RECIPE BY ID
+// GET /recipes/1
+// ================================
+app.get("/recipes/:id", (req, res) => {
     try {
-        const {
-            title,
-            description,
-            imageUrl,
-            servings,
-            cookingTime,
-            tags
-        } = req.body;
+        const id = Number(req.params.id);
 
-        if (!title) {
+        if (Number.isNaN(id)) {
             return res.status(400).json({
                 success: false,
-                message: "Title is required"
+                message: "Recipe ID must be a number"
             });
         }
 
-        const [result] = await db.query(
-            `
-            INSERT INTO recipes
-            (
-                title,
-                description,
-                imageUrl,
-                servings,
-                cookingTime,
-                tags
-            )
-            VALUES (?, ?, ?, ?, ?, ?)
-            `,
-            [
-                title,
-                description || "",
-                imageUrl || "",
-                servings || 1,
-                cookingTime || 0,
-                tags || ""
-            ]
+        const recipe = recipesData.data.find(
+            (item) => item.id === id
         );
 
-        res.status(201).json({
-            success: true,
-            message: "Recipe created",
-            id: result.insertId
-        });
-    } catch (error) {
-        console.error("Create recipe error:", error);
-
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-// =====================================
-// UPDATE RECIPE
-// =====================================
-
-app.put("/recipes/:id", async (req, res) => {
-    try {
-        const { id } = req.params;
-
-        const {
-            title,
-            description,
-            imageUrl,
-            servings,
-            cookingTime,
-            tags
-        } = req.body;
-
-        const [result] = await db.query(
-            `
-            UPDATE recipes
-            SET
-                title = ?,
-                description = ?,
-                imageUrl = ?,
-                servings = ?,
-                cookingTime = ?,
-                tags = ?
-            WHERE id = ?
-            `,
-            [
-                title,
-                description || "",
-                imageUrl || "",
-                servings || 1,
-                cookingTime || 0,
-                tags || "",
-                id
-            ]
-        );
-
-        if (result.affectedRows === 0) {
+        if (!recipe) {
             return res.status(404).json({
                 success: false,
-                message: "Recipe not found"
+                message: "Recipe not found",
+                id: id
             });
         }
 
         res.json({
             success: true,
-            message: "Recipe updated"
+            data: recipe
         });
+
     } catch (error) {
-        console.error("Update recipe error:", error);
+        console.error("GET /recipes/:id error:", error);
 
         res.status(500).json({
             success: false,
+            message: "Failed to get recipe",
             error: error.message
         });
     }
 });
 
-// =====================================
-// DELETE RECIPE
-// =====================================
-
-app.delete("/recipes/:id", async (req, res) => {
+// ================================
+// GET ALL TAGS
+// GET /tags
+// ================================
+app.get("/tags", (req, res) => {
     try {
-        const { id } = req.params;
+        const tags = [];
 
-        const [result] = await db.query(
-            "DELETE FROM recipes WHERE id = ?",
-            [id]
-        );
+        recipesData.data.forEach((recipe) => {
+            if (Array.isArray(recipe.tags)) {
+                recipe.tags.forEach((tag) => {
+                    if (!tags.includes(tag)) {
+                        tags.push(tag);
+                    }
+                });
+            }
+        });
 
-        if (result.affectedRows === 0) {
-            return res.status(404).json({
-                success: false,
-                message: "Recipe not found"
-            });
-        }
+        tags.sort();
 
         res.json({
             success: true,
-            message: "Recipe deleted"
+            count: tags.length,
+            data: tags
         });
-    } catch (error) {
-        console.error("Delete recipe error:", error);
 
+    } catch (error) {
         res.status(500).json({
             success: false,
+            message: "Failed to get tags",
             error: error.message
         });
     }
 });
 
-// =====================================
+// ================================
+// 404 ROUTE
+// ================================
+app.use((req, res) => {
+    res.status(404).json({
+        success: false,
+        message: "Route not found",
+        path: req.originalUrl
+    });
+});
+
+// ================================
+// ERROR HANDLER
+// ================================
+app.use((err, req, res, next) => {
+    console.error(err);
+
+    res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: err.message
+    });
+});
+
+// ================================
 // START SERVER
-// =====================================
-
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-    console.log("====================================");
-    console.log("RecipeBox Server Started");
-    console.log("====================================");
-    console.log(`Port: ${PORT}`);
-    console.log("Database: defaultdb");
-    console.log("Aiven MySQL: configured");
-    console.log("====================================");
+// ================================
+app.listen(PORT, "0.0.0.0", () => {
+    console.log("=================================");
+    console.log("RecipeBox API Server");
+    console.log("=================================");
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Local: http://localhost:${PORT}`);
+    console.log(`Recipes: http://localhost:${PORT}/recipes`);
+    console.log(`Health: http://localhost:${PORT}/health`);
+    console.log("=================================");
 });
