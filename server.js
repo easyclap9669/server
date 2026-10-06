@@ -9,79 +9,105 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const requiredEnv = [
-  "DB_HOST",
-  "DB_PORT",
-  "DB_USER",
-  "DB_PASSWORD",
-  "DB_NAME",
-];
+/* ================================
+   ENVIRONMENT VARIABLES
+================================ */
 
-for (const key of requiredEnv) {
-  if (!process.env[key]) {
-    console.error(`❌ Missing environment variable: ${key}`);
-  }
-}
+const DB_HOST = process.env.DB_HOST;
+const DB_PORT = Number(process.env.DB_PORT || 3306);
+const DB_USER = process.env.DB_USER;
+const DB_PASSWORD = process.env.DB_PASSWORD;
+const DB_NAME = process.env.DB_NAME;
+
+console.log("=================================");
+console.log("RecipeBox API");
+console.log("DB_HOST:", DB_HOST ? "SET" : "MISSING");
+console.log("DB_PORT:", DB_PORT);
+console.log("DB_USER:", DB_USER ? "SET" : "MISSING");
+console.log("DB_PASSWORD:", DB_PASSWORD ? "SET" : "MISSING");
+console.log("DB_NAME:", DB_NAME ? "SET" : "MISSING");
+console.log("=================================");
+
+/* ================================
+   MYSQL POOL
+================================ */
 
 const pool = mysql.createPool({
-  host: process.env.DB_HOST,
-  port: Number(process.env.DB_PORT),
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
+  host: DB_HOST,
+  port: DB_PORT,
+  user: DB_USER,
+  password: DB_PASSWORD,
+  database: DB_NAME,
 
   ssl: {
     rejectUnauthorized: false,
   },
 
   waitForConnections: true,
-  connectionLimit: 10,
+  connectionLimit: 5,
   queueLimit: 0,
-  connectTimeout: 20000,
+
+  connectTimeout: 30000,
 });
 
-// Test Aiven connection
+/* ================================
+   DATABASE TEST
+================================ */
+
 async function testDatabase() {
+  let connection;
+
   try {
-    const connection = await pool.getConnection();
+    connection = await pool.getConnection();
 
-    await connection.ping();
+    await connection.query("SELECT 1");
 
     console.log("=================================");
-    console.log("✅ AIVEN MYSQL CONNECTED");
-    console.log(`Host: ${process.env.DB_HOST}`);
-    console.log(`Port: ${process.env.DB_PORT}`);
-    console.log(`Database: ${process.env.DB_NAME}`);
+    console.log("✅ MYSQL DATABASE CONNECTED");
+    console.log("Host:", DB_HOST);
+    console.log("Port:", DB_PORT);
+    console.log("Database:", DB_NAME);
     console.log("=================================");
 
-    connection.release();
+    return true;
   } catch (error) {
     console.error("=================================");
-    console.error("❌ AIVEN MYSQL CONNECTION FAILED");
+    console.error("❌ MYSQL CONNECTION FAILED");
     console.error("Message:", error.message);
     console.error("Code:", error.code);
-    console.error("Address:", error.address);
-    console.error("Port:", error.port);
     console.error("=================================");
+
+    return false;
+  } finally {
+    if (connection) {
+      connection.release();
+    }
   }
 }
 
-// Home
+/* ================================
+   HOME
+================================ */
+
 app.get("/", (req, res) => {
   res.json({
     success: true,
     message: "RecipeBox API is running",
+    database: "Aiven MySQL",
   });
 });
 
-// Health check
+/* ================================
+   HEALTH CHECK
+================================ */
+
 app.get("/health", async (req, res) => {
+  let connection;
+
   try {
-    const connection = await pool.getConnection();
+    connection = await pool.getConnection();
 
-    await connection.ping();
-
-    connection.release();
+    await connection.query("SELECT 1");
 
     res.json({
       success: true,
@@ -89,39 +115,64 @@ app.get("/health", async (req, res) => {
       database: "connected",
     });
   } catch (error) {
+    console.error("Health database error:", error);
+
     res.status(500).json({
       success: false,
       server: "online",
       database: "disconnected",
       error: error.message,
-      code: error.code,
-      sqlState: error.sqlState || null,
-      address: error.address || null,
-      port: error.port || null,
+      code: error.code || null,
     });
+  } finally {
+    if (connection) {
+      connection.release();
+    }
   }
 });
 
-// Test database
+/* ================================
+   TEST DATABASE
+================================ */
+
 app.get("/test-db", async (req, res) => {
+  let connection;
+
   try {
-    const [rows] = await pool.query("SELECT 1 AS test");
+    connection = await pool.getConnection();
+
+    const [rows] = await connection.query(`
+      SELECT
+        1 AS test,
+        DATABASE() AS database_name,
+        NOW() AS server_time
+    `);
 
     res.json({
       success: true,
       database: "connected",
-      result: rows,
+      result: rows[0],
     });
   } catch (error) {
+    console.error("Database test error:", error);
+
     res.status(500).json({
       success: false,
+      database: "disconnected",
       error: error.message,
-      code: error.code,
+      code: error.code || null,
     });
+  } finally {
+    if (connection) {
+      connection.release();
+    }
   }
 });
 
-// Get all recipes
+/* ================================
+   GET ALL RECIPES
+================================ */
+
 app.get("/api/recipes", async (req, res) => {
   try {
     const [rows] = await pool.query(`
@@ -140,16 +191,23 @@ app.get("/api/recipes", async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message,
-      code: error.code,
+      code: error.code || null,
     });
   }
 });
 
-// Get recipe by ID
+/* ================================
+   GET RECIPE BY ID
+================================ */
+
 app.get("/api/recipes/:id", async (req, res) => {
   try {
     const [rows] = await pool.query(
-      "SELECT * FROM recipes WHERE id = ?",
+      `
+      SELECT *
+      FROM recipes
+      WHERE id = ?
+      `,
       [req.params.id]
     );
 
@@ -170,12 +228,15 @@ app.get("/api/recipes/:id", async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message,
-      code: error.code,
+      code: error.code || null,
     });
   }
 });
 
-// 404
+/* ================================
+   404
+================================ */
+
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -184,9 +245,13 @@ app.use((req, res) => {
   });
 });
 
-const PORT = process.env.PORT || 5000;
+/* ================================
+   START SERVER
+================================ */
 
-app.listen(PORT, async () => {
+const PORT = Number(process.env.PORT || 10000);
+
+app.listen(PORT, "0.0.0.0", async () => {
   console.log(`🚀 RecipeBox API running on port ${PORT}`);
 
   await testDatabase();
