@@ -1,0 +1,163 @@
+{
+  "recipes": [
+    {
+      "id": 1,
+      "title": "Chicken Fried Rice",
+      "description": "A delicious and easy chicken fried rice recipe.",
+      "imageUrl": "https://nourishingniki.com/wp-content/uploads/2024/08/shrimp-and-chicken-fried-rice-3-scaled.jpg",
+      "servings": 2,
+      "cookingTime": 25,
+      "tags": ["Chicken", "Rice", "Asian"],
+      "ingredients": [
+        {
+          "name": "Chicken breast",
+          "amount": "200g"
+        },
+        {
+          "name": "Cooked rice",
+          "amount": "2 cups"
+        },
+        {
+          "name": "Egg",
+          "amount": "2"
+        },
+        {
+          "name": "Carrot",
+          "amount": "1"
+        },
+        {
+          "name": "Soy sauce",
+          "amount": "2 tbsp"
+        },
+        {
+          "name": "Cooking oil",
+          "amount": "1 tbsp"
+        }
+      ],
+      "steps": [
+        {
+          "step": 1,
+          "description": "Cut the chicken into small pieces."
+        },
+        {
+          "step": 2,
+          "description": "Heat oil in a large pan."
+        },
+        {
+          "step": 3,
+          "description": "Cook the chicken until fully cooked."
+        },
+        {
+          "step": 4,
+          "description": "Add the eggs and vegetables."
+        },
+        {
+          "step": 5,
+          "description": "Add cooked rice and soy sauce."
+        },
+        {
+          "step": 6,
+          "description": "Stir fry everything for several minutes and serve."
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Beef Noodle Soup",
+      "description": "Warm and flavorful beef noodle soup.",
+      "imageUrl": "https://images.unsplash.com/photo-1582878826629-29b7ad1cdc43",
+      "servings": 2,
+      "cookingTime": 35,
+      "tags": ["Beef", "Noodles", "Soup"],
+      "ingredients": [
+        {
+          "name": "Beef",
+          "amount": "250g"
+        },
+        {
+          "name": "Noodles",
+          "amount": "200g"
+        },
+        {
+          "name": "Beef broth",
+          "amount": "500ml"
+        },
+        {
+          "name": "Green onion",
+          "amount": "2"
+        }
+      ],
+      "steps": [
+        {
+          "step": 1,
+          "description": "Slice the beef thinly."
+        },
+        {
+          "step": 2,
+          "description": "Heat the beef broth."
+        },
+        {
+          "step": 3,
+          "description": "Cook the noodles."
+        },
+        {
+          "step": 4,
+          "description": "Add beef and noodles to the broth."
+        },
+        {
+          "step": 5,
+          "description": "Garnish with green onion and serve."
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Vegetable Pasta",
+      "description": "Simple pasta with fresh vegetables.",
+      "imageUrl": "https://images.unsplash.com/photo-1473093295043-cdd812d0e601",
+      "servings": 2,
+      "cookingTime": 20,
+      "tags": ["Pasta", "Vegetable", "Italian"],
+      "ingredients": [
+        {
+          "name": "Pasta",
+          "amount": "200g"
+        },
+        {
+          "name": "Tomato",
+          "amount": "2"
+        },
+        {
+          "name": "Bell pepper",
+          "amount": "1"
+        },
+        {
+          "name": "Olive oil",
+          "amount": "2 tbsp"
+        }
+      ],
+      "steps": [
+        {
+          "step": 1,
+          "description": "Boil the pasta."
+        },
+        {
+          "step": 2,
+          "description": "Chop the vegetables."
+        },
+        {
+          "step": 3,
+          "description": "Heat olive oil in a pan."
+        },
+        {
+          "step": 4,
+          "description": "Cook the vegetables."
+        },
+        {
+          "step": 5,
+          "description": "Mix the pasta with the vegetables and serve."
+        }
+      ]
+    }
+  ]
+}
