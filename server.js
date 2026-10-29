@@ -17,13 +17,12 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "recipebox.json");
 
 app.disable("x-powered-by");
-
 app.use(cors());
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 
 // =====================================================
-// INITIAL RECIPE DATA
+// INITIAL RECIPES
 // =====================================================
 
 const initialRecipes = [
@@ -31,8 +30,7 @@ const initialRecipes = [
     id: 1,
     title: "Chicken Fried Rice",
     description: "A delicious and easy chicken fried rice recipe.",
-    imageUrl:
-      "https://nourishingniki.com/wp-content/uploads/2024/08/shrimp-and-chicken-fried-rice-3-scaled.jpg",
+    imageUrl: "https://nourishingniki.com/wp-content/uploads/2024/08/shrimp-and-chicken-fried-rice-3-scaled.jpg",
     servings: 2,
     cookingTime: 25,
     tags: ["chicken", "rice", "quick", "asian"],
@@ -50,7 +48,7 @@ const initialRecipes = [
       { id: 3, description: "Cook the chicken until fully cooked." },
       { id: 4, description: "Add garlic and cook for 30 seconds." },
       { id: 5, description: "Add the cooked rice and stir well." },
-      { id: 6, description: "Add the eggs and mix everything together." },
+      { id: 6, description: "Add eggs and mix everything together." },
       { id: 7, description: "Add soy sauce and stir-fry for several minutes." },
       { id: 8, description: "Serve hot." }
     ],
@@ -60,8 +58,7 @@ const initialRecipes = [
     id: 2,
     title: "Spaghetti Carbonara",
     description: "Creamy Italian-style spaghetti carbonara.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1612874742237-6526221588e3",
+    imageUrl: "https://images.unsplash.com/photo-1612874742237-6526221588e3",
     servings: 2,
     cookingTime: 20,
     tags: ["pasta", "italian", "quick"],
@@ -73,11 +70,11 @@ const initialRecipes = [
       { id: 5, name: "Black pepper", amount: "1 tsp" }
     ],
     steps: [
-      { id: 1, description: "Cook the spaghetti according to the package instructions." },
-      { id: 2, description: "Cook the bacon in a pan until crispy." },
+      { id: 1, description: "Cook spaghetti according to package instructions." },
+      { id: 2, description: "Cook bacon in a pan until crispy." },
       { id: 3, description: "Mix eggs and Parmesan cheese in a bowl." },
-      { id: 4, description: "Drain the spaghetti and reserve some pasta water." },
-      { id: 5, description: "Mix the hot spaghetti with the bacon." },
+      { id: 4, description: "Drain spaghetti, reserving some pasta water." },
+      { id: 5, description: "Mix hot spaghetti with bacon." },
       { id: 6, description: "Remove from heat and add the egg mixture." },
       { id: 7, description: "Add pasta water if needed and mix until creamy." },
       { id: 8, description: "Add black pepper and serve." }
@@ -88,8 +85,7 @@ const initialRecipes = [
     id: 3,
     title: "Beef Burger",
     description: "Juicy homemade beef burger with fresh vegetables.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1568901346375-23c9450c58cd",
+    imageUrl: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd",
     servings: 2,
     cookingTime: 30,
     tags: ["beef", "burger", "american"],
@@ -103,62 +99,70 @@ const initialRecipes = [
       { id: 7, name: "Black pepper", amount: "1/2 tsp" }
     ],
     steps: [
-      { id: 1, description: "Form the ground beef into burger patties." },
+      { id: 1, description: "Form ground beef into burger patties." },
       { id: 2, description: "Season both sides with salt and pepper." },
       { id: 3, description: "Heat a pan or grill." },
-      { id: 4, description: "Cook the patties until fully cooked." },
+      { id: 4, description: "Cook patties until fully cooked." },
       { id: 5, description: "Add cheese during the final minute." },
       { id: 6, description: "Toast the burger buns." },
       { id: 7, description: "Add lettuce and tomato." },
-      { id: 8, description: "Place the burger patty inside the bun and serve." }
+      { id: 8, description: "Place the patty inside the bun and serve." }
     ],
     favorite: false
   }
 ];
 
 // =====================================================
-// JSON STORAGE
+// PERSISTENT JSON STORAGE
 // =====================================================
 
 let recipes = [];
 let shoppingList = [];
 let feedbackItems = [];
+let reviews = [];
 let nextFeedbackId = 1;
+let nextReviewId = 1;
 
 function normalizeState(data) {
   return {
-    recipes: Array.isArray(data.recipes) ? data.recipes : initialRecipes,
-    shoppingList: Array.isArray(data.shoppingList) ? data.shoppingList : [],
+    recipes: Array.isArray(data.recipes)
+      ? data.recipes
+      : JSON.parse(JSON.stringify(initialRecipes)),
+    shoppingList: Array.isArray(data.shoppingList)
+      ? data.shoppingList
+      : [],
     feedback: Array.isArray(data.feedback) ? data.feedback : [],
-    nextFeedbackId: Number(data.nextFeedbackId) || 1
+    reviews: Array.isArray(data.reviews) ? data.reviews : [],
+    nextFeedbackId: Number(data.nextFeedbackId) || 1,
+    nextReviewId: Number(data.nextReviewId) || 1
   };
 }
 
 function loadData() {
-  try {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.mkdirSync(DATA_DIR, { recursive: true });
 
-    if (fs.existsSync(DATA_FILE)) {
-      const parsed = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-      const data = normalizeState(parsed);
-
-      recipes = data.recipes;
-      shoppingList = data.shoppingList;
-      feedbackItems = data.feedback;
-      nextFeedbackId = data.nextFeedbackId;
-
-      console.log(`Loaded ${recipes.length} recipes from JSON storage.`);
-    } else {
-      recipes = JSON.parse(JSON.stringify(initialRecipes));
-      shoppingList = [];
-      feedbackItems = [];
-      saveData();
-      console.log("Created initial RecipeBox data.");
-    }
-  } catch (error) {
-    console.error("Unable to load storage:", error.message);
-    throw error;
+  if (!fs.existsSync(DATA_FILE)) {
+    recipes = JSON.parse(JSON.stringify(initialRecipes));
+    shoppingList = [];
+    feedbackItems = [];
+    reviews = [];
+    saveData();
+    console.log("Created initial RecipeBox data.");
+    return;
   }
+
+  const parsed = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+  const data = normalizeState(parsed);
+
+  recipes = data.recipes;
+  shoppingList = data.shoppingList;
+  feedbackItems = data.feedback;
+  reviews = data.reviews;
+  nextFeedbackId = data.nextFeedbackId;
+  nextReviewId = data.nextReviewId;
+
+  console.log(`Loaded ${recipes.length} recipes.`);
+  console.log(`Loaded ${reviews.length} reviews.`);
 }
 
 function saveData() {
@@ -168,7 +172,9 @@ function saveData() {
     recipes,
     shoppingList,
     feedback: feedbackItems,
-    nextFeedbackId
+    reviews,
+    nextFeedbackId,
+    nextReviewId
   };
 
   const tempFile = `${DATA_FILE}.tmp`;
@@ -183,23 +189,22 @@ function persist(res, statusCode, payload) {
     return res.status(statusCode).json(payload);
   } catch (error) {
     console.error("Storage write failed:", error.message);
+
     return res.status(500).json({
       success: false,
-      message: "Could not save data. Check server storage permissions."
+      message: "Could not save data. Check storage permissions."
     });
   }
 }
 
 // =====================================================
-// HELPERS AND VALIDATION
+// HELPERS
 // =====================================================
 
-function nextRecipeId() {
-  return recipes.reduce((max, recipe) => Math.max(max, recipe.id), 0) + 1;
-}
-
-function nextShoppingId() {
-  return shoppingList.reduce((max, item) => Math.max(max, item.id), 0) + 1;
+function cleanText(value, maxLength = 5000) {
+  return typeof value === "string"
+    ? value.trim().slice(0, maxLength)
+    : "";
 }
 
 function validId(value) {
@@ -207,10 +212,12 @@ function validId(value) {
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
-function cleanText(value, maxLength = 5000) {
-  return typeof value === "string"
-    ? value.trim().slice(0, maxLength)
-    : "";
+function nextRecipeId() {
+  return recipes.reduce((max, item) => Math.max(max, Number(item.id) || 0), 0) + 1;
+}
+
+function nextShoppingId() {
+  return shoppingList.reduce((max, item) => Math.max(max, Number(item.id) || 0), 0) + 1;
 }
 
 function normalizeTags(tags) {
@@ -227,20 +234,24 @@ function normalizeTags(tags) {
 function normalizeIngredients(items) {
   if (!Array.isArray(items)) return [];
 
-  return items.slice(0, 200).map((item, index) => ({
-    id: index + 1,
-    name: cleanText(item?.name, 150),
-    amount: cleanText(item?.amount, 100)
-  })).filter(item => item.name);
+  return items.slice(0, 200)
+    .map((item, index) => ({
+      id: index + 1,
+      name: cleanText(item?.name, 150),
+      amount: cleanText(item?.amount, 100)
+    }))
+    .filter(item => item.name);
 }
 
 function normalizeSteps(items) {
   if (!Array.isArray(items)) return [];
 
-  return items.slice(0, 200).map((item, index) => ({
-    id: index + 1,
-    description: cleanText(item?.description, 2000)
-  })).filter(item => item.description);
+  return items.slice(0, 200)
+    .map((item, index) => ({
+      id: index + 1,
+      description: cleanText(item?.description, 2000)
+    }))
+    .filter(item => item.description);
 }
 
 function normalizeRecipeInput(body, oldRecipe = {}) {
@@ -248,9 +259,7 @@ function normalizeRecipeInput(body, oldRecipe = {}) {
     ? oldRecipe.title || ""
     : cleanText(body.title, 150);
 
-  if (!title) {
-    throw new Error("Recipe title is required.");
-  }
+  if (!title) throw new Error("Recipe title is required.");
 
   const servings = body.servings === undefined
     ? oldRecipe.servings ?? 1
@@ -261,7 +270,7 @@ function normalizeRecipeInput(body, oldRecipe = {}) {
     : Number(body.cookingTime);
 
   if (!Number.isInteger(servings) || servings < 1 || servings > 1000) {
-    throw new Error("Servings must be an integer between 1 and 1000.");
+    throw new Error("Servings must be between 1 and 1000.");
   }
 
   if (!Number.isInteger(cookingTime) || cookingTime < 0 || cookingTime > 100000) {
@@ -273,7 +282,7 @@ function normalizeRecipeInput(body, oldRecipe = {}) {
     : cleanText(body.imageUrl, 2048);
 
   if (imageUrl && !/^https?:\/\/\S+$/i.test(imageUrl)) {
-    throw new Error("Image URL must begin with http:// or https://.");
+    throw new Error("Image URL must start with http:// or https://.");
   }
 
   return {
@@ -284,16 +293,28 @@ function normalizeRecipeInput(body, oldRecipe = {}) {
     imageUrl,
     servings,
     cookingTime,
-    tags: body.tags === undefined
-      ? oldRecipe.tags || []
-      : normalizeTags(body.tags),
+    tags: body.tags === undefined ? oldRecipe.tags || [] : normalizeTags(body.tags),
     ingredients: body.ingredients === undefined
       ? oldRecipe.ingredients || []
       : normalizeIngredients(body.ingredients),
-    steps: body.steps === undefined
-      ? oldRecipe.steps || []
-      : normalizeSteps(body.steps)
+    steps: body.steps === undefined ? oldRecipe.steps || [] : normalizeSteps(body.steps)
   };
+}
+
+function getRecipeRating(recipeId) {
+  const recipeReviews = reviews.filter(review => review.recipeId === recipeId);
+  const total = recipeReviews.reduce((sum, review) => sum + review.rating, 0);
+
+  return {
+    averageRating: recipeReviews.length
+      ? Number((total / recipeReviews.length).toFixed(1))
+      : 0,
+    reviewCount: recipeReviews.length
+  };
+}
+
+function recipeWithRating(recipe) {
+  return { ...recipe, ...getRecipeRating(recipe.id) };
 }
 
 function findRecipe(req, res, next) {
@@ -306,7 +327,7 @@ function findRecipe(req, res, next) {
     });
   }
 
-  const recipe = recipes.find(item => item.id === id);
+  const recipe = recipes.find(item => Number(item.id) === id);
 
   if (!recipe) {
     return res.status(404).json({
@@ -327,7 +348,7 @@ app.get("/", (req, res) => {
   res.json({
     success: true,
     message: "RecipeBox API is running",
-    version: "2.0.0",
+    version: "3.0.0",
     storage: "JSON file",
     endpoints: {
       health: "/health",
@@ -335,6 +356,7 @@ app.get("/", (req, res) => {
       recipe: "/recipes/:id",
       favorites: "/favorites",
       favorite: "/recipes/:id/favorite",
+      reviews: "/recipes/:id/reviews",
       shoppingList: "/shopping-list",
       recipeIngredients: "/shopping-list/recipe/:id",
       feedback: "/feedback"
@@ -347,13 +369,13 @@ app.get("/health", (req, res) => {
     success: true,
     status: "healthy",
     recipes: recipes.length,
-    shoppingItems: shoppingList.length
+    shoppingItems: shoppingList.length,
+    reviews: reviews.length
   });
 });
 
 // =====================================================
-// GET RECIPES / SEARCH / TAG FILTER
-// GET /recipes?q=chicken&tag=rice
+// RECIPES: SEARCH, FILTER, READ, CREATE, UPDATE, DELETE
 // =====================================================
 
 app.get("/recipes", (req, res) => {
@@ -382,35 +404,28 @@ app.get("/recipes", (req, res) => {
   res.json({
     success: true,
     count: result.length,
-    recipes: result
+    recipes: result.map(recipeWithRating)
   });
 });
-
-// =====================================================
-// GET ONE RECIPE
-// =====================================================
 
 app.get("/recipes/:id", findRecipe, (req, res) => {
   res.json({
     success: true,
-    recipe: req.recipe
+    recipe: recipeWithRating(req.recipe)
   });
 });
-
-// =====================================================
-// CREATE RECIPE
-// POST /recipes
-// =====================================================
 
 app.post("/recipes", (req, res) => {
   try {
     const input = normalizeRecipeInput(req.body);
+    const now = new Date().toISOString();
+
     const recipe = {
       id: nextRecipeId(),
       ...input,
       favorite: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      createdAt: now,
+      updatedAt: now
     };
 
     recipes.push(recipe);
@@ -418,63 +433,49 @@ app.post("/recipes", (req, res) => {
     return persist(res, 201, {
       success: true,
       message: "Recipe created successfully.",
-      recipe
+      recipe: recipeWithRating(recipe)
     });
   } catch (error) {
-    return res.status(400).json({
-      success: false,
-      message: error.message
-    });
+    return res.status(400).json({ success: false, message: error.message });
   }
 });
 
-// =====================================================
-// UPDATE RECIPE
-// PUT /recipes/:id
-// =====================================================
-
 app.put("/recipes/:id", findRecipe, (req, res) => {
   try {
-    const oldRecipe = req.recipe;
-    const input = normalizeRecipeInput(req.body, oldRecipe);
+    const old = req.recipe;
+    const input = normalizeRecipeInput(req.body, old);
 
     const updated = {
-      ...oldRecipe,
+      ...old,
       ...input,
-      id: oldRecipe.id,
-      favorite: oldRecipe.favorite === true,
-      createdAt: oldRecipe.createdAt || new Date().toISOString(),
+      id: old.id,
+      favorite: old.favorite === true,
+      createdAt: old.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
 
-    recipes = recipes.map(item => item.id === oldRecipe.id ? updated : item);
+    recipes = recipes.map(item => item.id === old.id ? updated : item);
 
     return persist(res, 200, {
       success: true,
       message: "Recipe updated successfully.",
-      recipe: updated
+      recipe: recipeWithRating(updated)
     });
   } catch (error) {
-    return res.status(400).json({
-      success: false,
-      message: error.message
-    });
+    return res.status(400).json({ success: false, message: error.message });
   }
 });
-
-// =====================================================
-// DELETE RECIPE
-// DELETE /recipes/:id
-// =====================================================
 
 app.delete("/recipes/:id", findRecipe, (req, res) => {
   const recipe = req.recipe;
 
   recipes = recipes.filter(item => item.id !== recipe.id);
+  reviews = reviews.filter(item => item.recipeId !== recipe.id);
+  shoppingList = shoppingList.filter(item => item.recipeId !== recipe.id);
 
   return persist(res, 200, {
     success: true,
-    message: "Recipe deleted successfully.",
+    message: "Recipe and its reviews deleted.",
     recipe
   });
 });
@@ -483,20 +484,24 @@ app.delete("/recipes/:id", findRecipe, (req, res) => {
 // FAVORITES
 // =====================================================
 
+app.get("/favorites", (req, res) => {
+  const favorites = recipes
+    .filter(recipe => recipe.favorite === true)
+    .map(recipeWithRating);
+
+  res.json({ success: true, count: favorites.length, recipes: favorites });
+});
+
 app.put("/recipes/:id/favorite", findRecipe, (req, res) => {
   req.recipe.favorite = !req.recipe.favorite;
 
   return persist(res, 200, {
     success: true,
-    message: req.recipe.favorite
-      ? "Recipe added to favorites."
-      : "Recipe removed from favorites.",
     favorite: req.recipe.favorite,
-    recipe: req.recipe
+    recipe: recipeWithRating(req.recipe)
   });
 });
 
-// Explicit favorite state avoids accidental double toggles.
 app.patch("/recipes/:id/favorite", findRecipe, (req, res) => {
   if (typeof req.body.favorite !== "boolean") {
     return res.status(400).json({
@@ -510,17 +515,97 @@ app.patch("/recipes/:id/favorite", findRecipe, (req, res) => {
   return persist(res, 200, {
     success: true,
     favorite: req.recipe.favorite,
-    recipe: req.recipe
+    recipe: recipeWithRating(req.recipe)
   });
 });
 
-app.get("/favorites", (req, res) => {
-  const favorites = recipes.filter(recipe => recipe.favorite === true);
+// =====================================================
+// COMMENTS AND STAR RATINGS
+// =====================================================
+
+// GET /recipes/1/reviews
+app.get("/recipes/:id/reviews", findRecipe, (req, res) => {
+  const items = reviews
+    .filter(review => review.recipeId === req.recipe.id)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   res.json({
     success: true,
-    count: favorites.length,
-    recipes: favorites
+    recipeId: req.recipe.id,
+    ...getRecipeRating(req.recipe.id),
+    count: items.length,
+    reviews: items
+  });
+});
+
+// POST /recipes/1/reviews
+// Body: { "name": "Alex", "rating": 5, "comment": "Great recipe!" }
+app.post("/recipes/:id/reviews", findRecipe, (req, res) => {
+  const name = cleanText(req.body.name, 80) || "Anonymous";
+  const comment = cleanText(req.body.comment, 2000);
+  const rating = Number(req.body.rating);
+
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    return res.status(400).json({
+      success: false,
+      message: "Rating must be an integer from 1 to 5."
+    });
+  }
+
+  if (!comment) {
+    return res.status(400).json({
+      success: false,
+      message: "Comment is required."
+    });
+  }
+
+  const review = {
+    id: nextReviewId++,
+    recipeId: req.recipe.id,
+    name,
+    rating,
+    comment,
+    createdAt: new Date().toISOString()
+  };
+
+  reviews.push(review);
+
+  return persist(res, 201, {
+    success: true,
+    message: "Your rating and comment have been saved.",
+    review,
+    ...getRecipeRating(req.recipe.id)
+  });
+});
+
+// DELETE /reviews/1
+// Note: protect this endpoint with authentication before public deployment.
+app.delete("/reviews/:reviewId", (req, res) => {
+  const id = validId(req.params.reviewId);
+
+  if (!id) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid review ID."
+    });
+  }
+
+  const index = reviews.findIndex(review => review.id === id);
+
+  if (index === -1) {
+    return res.status(404).json({
+      success: false,
+      message: "Review not found."
+    });
+  }
+
+  const [review] = reviews.splice(index, 1);
+
+  return persist(res, 200, {
+    success: true,
+    message: "Review deleted.",
+    review,
+    ...getRecipeRating(review.recipeId)
   });
 });
 
@@ -547,9 +632,9 @@ app.post("/shopping-list", (req, res) => {
     });
   }
 
-  const existing = shoppingList.find(
-    item => item.name.toLowerCase() === name.toLowerCase() &&
-      item.amount === amount
+  const existing = shoppingList.find(item =>
+    item.name.toLowerCase() === name.toLowerCase() &&
+    item.amount === amount
   );
 
   if (existing) {
@@ -599,18 +684,19 @@ app.put("/shopping-list/:id", (req, res) => {
   const { name, amount, checked } = req.body;
 
   if (name !== undefined) {
-    if (!cleanText(name, 150)) {
+    const cleanName = cleanText(name, 150);
+
+    if (!cleanName) {
       return res.status(400).json({
         success: false,
         message: "Item name cannot be empty."
       });
     }
-    item.name = cleanText(name, 150);
+
+    item.name = cleanName;
   }
 
-  if (amount !== undefined) {
-    item.amount = cleanText(amount, 100);
-  }
+  if (amount !== undefined) item.amount = cleanText(amount, 100);
 
   if (checked !== undefined) {
     if (typeof checked !== "boolean") {
@@ -619,6 +705,7 @@ app.put("/shopping-list/:id", (req, res) => {
         message: "checked must be true or false."
       });
     }
+
     item.checked = checked;
   }
 
@@ -657,16 +744,20 @@ app.delete("/shopping-list/:id", (req, res) => {
   });
 });
 
-// =====================================================
-// ADD ALL INGREDIENTS FROM A RECIPE
-// POST /shopping-list/recipe/:id
-// =====================================================
-
+// POST /shopping-list/recipe/1
 app.post("/shopping-list/recipe/:id", findRecipe, (req, res) => {
   const added = [];
 
   for (const ingredient of req.recipe.ingredients || []) {
     if (!ingredient.name) continue;
+
+    const exists = shoppingList.some(item =>
+      item.recipeId === req.recipe.id &&
+      item.name.toLowerCase() === ingredient.name.toLowerCase() &&
+      item.amount === (ingredient.amount || "")
+    );
+
+    if (exists) continue;
 
     const item = {
       id: nextShoppingId(),
@@ -693,7 +784,6 @@ app.post("/shopping-list/recipe/:id", findRecipe, (req, res) => {
 
 // =====================================================
 // FEEDBACK
-// POST /feedback
 // =====================================================
 
 app.post("/feedback", (req, res) => {
@@ -726,8 +816,7 @@ app.post("/feedback", (req, res) => {
   });
 });
 
-// Optional protected-by-deployment admin endpoint.
-// Set ADMIN_KEY in your environment before enabling access.
+// GET /admin/feedback
 app.get("/admin/feedback", (req, res) => {
   const adminKey = process.env.ADMIN_KEY;
 
@@ -746,7 +835,7 @@ app.get("/admin/feedback", (req, res) => {
 });
 
 // =====================================================
-// API ERROR HANDLING
+// 404 AND ERROR HANDLING
 // =====================================================
 
 app.use((req, res) => {
@@ -779,13 +868,20 @@ app.use((error, req, res, next) => {
 // START SERVER
 // =====================================================
 
-loadData();
+try {
+  loadData();
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log("=================================");
-  console.log("RecipeBox API v2.0.0");
-  console.log(`Port: ${PORT}`);
-  console.log(`Storage: ${DATA_FILE}`);
-  console.log("Database: JSON file");
-  console.log("=================================");
-});
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log("=================================");
+    console.log("RecipeBox API v3.0.0");
+    console.log(`Port: ${PORT}`);
+    console.log(`Storage: ${DATA_FILE}`);
+    console.log(`Recipes: ${recipes.length}`);
+    console.log(`Reviews: ${reviews.length}`);
+    console.log("Comments and ratings enabled.");
+    console.log("=================================");
+  });
+} catch (error) {
+  console.error("Failed to start RecipeBox API:", error.message);
+  process.exit(1);
+}
