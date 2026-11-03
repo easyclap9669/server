@@ -5,6 +5,8 @@ const express = require("express");
 const cors = require("cors");
 const fs = require("fs");
 const path = require("path");
+const multer = require("multer");
+const crypto = require("crypto");
 
 const app = express();
 
@@ -15,11 +17,73 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "recipebox.json");
+const UPLOAD_DIR = path.join(DATA_DIR, "uploads");
 
 app.disable("x-powered-by");
 app.use(cors());
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
+
+// Set true when deployed behind a trusted proxy such as Render.
+// Configure according to your hosting environment.
+if (process.env.TRUST_PROXY === "true") {
+  app.set("trust proxy", 1);
+}
+
+// =====================================================
+// IMAGE UPLOAD CONFIGURATION
+// =====================================================
+
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+const ALLOWED_MIME_TYPES = {
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp"
+};
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, UPLOAD_DIR);
+  },
+
+  filename: (req, file, cb) => {
+    const extension = ALLOWED_MIME_TYPES[file.mimetype];
+
+    if (!extension) {
+      return cb(new Error("Only JPG, PNG, and WebP images are allowed."));
+    }
+
+    cb(null, `${crypto.randomUUID()}${extension}`);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+    files: 1
+  },
+
+  fileFilter: (req, file, cb) => {
+    if (!ALLOWED_MIME_TYPES[file.mimetype]) {
+      return cb(new Error("Only JPG, PNG, and WebP images are allowed."));
+    }
+
+    cb(null, true);
+  }
+});
+
+// Serve uploaded photos.
+app.use("/uploads", express.static(UPLOAD_DIR, {
+  dotfiles: "deny",
+  index: false,
+  fallthrough: true,
+  maxAge: "7d",
+  setHeaders: (res) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+  }
+}));
 
 // =====================================================
 // INITIAL RECIPES
@@ -124,6 +188,8 @@ let nextFeedbackId = 1;
 let nextReviewId = 1;
 
 function normalizeState(data) {
+  data = data && typeof data === "object" ? data : {};
+
   return {
     recipes: Array.isArray(data.recipes)
       ? data.recipes
@@ -140,6 +206,7 @@ function normalizeState(data) {
 
 function loadData() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
   if (!fs.existsSync(DATA_FILE)) {
     recipes = JSON.parse(JSON.stringify(initialRecipes));
@@ -147,6 +214,7 @@ function loadData() {
     feedbackItems = [];
     reviews = [];
     saveData();
+
     console.log("Created initial RecipeBox data.");
     return;
   }
@@ -213,11 +281,13 @@ function validId(value) {
 }
 
 function nextRecipeId() {
-  return recipes.reduce((max, item) => Math.max(max, Number(item.id) || 0), 0) + 1;
+  return recipes.reduce((max, item) =>
+    Math.max(max, Number(item.id) || 0), 0) + 1;
 }
 
 function nextShoppingId() {
-  return shoppingList.reduce((max, item) => Math.max(max, Number(item.id) || 0), 0) + 1;
+  return shoppingList.reduce((max, item) =>
+    Math.max(max, Number(item.id) || 0), 0) + 1;
 }
 
 function normalizeTags(tags) {
@@ -293,17 +363,26 @@ function normalizeRecipeInput(body, oldRecipe = {}) {
     imageUrl,
     servings,
     cookingTime,
-    tags: body.tags === undefined ? oldRecipe.tags || [] : normalizeTags(body.tags),
+    tags: body.tags === undefined
+      ? oldRecipe.tags || []
+      : normalizeTags(body.tags),
     ingredients: body.ingredients === undefined
       ? oldRecipe.ingredients || []
       : normalizeIngredients(body.ingredients),
-    steps: body.steps === undefined ? oldRecipe.steps || [] : normalizeSteps(body.steps)
+    steps: body.steps === undefined
+      ? oldRecipe.steps || []
+      : normalizeSteps(body.steps)
   };
 }
 
 function getRecipeRating(recipeId) {
-  const recipeReviews = reviews.filter(review => review.recipeId === recipeId);
-  const total = recipeReviews.reduce((sum, review) => sum + review.rating, 0);
+  const recipeReviews = reviews.filter(
+    review => review.recipeId === recipeId
+  );
+
+  const total = recipeReviews.reduce(
+    (sum, review) => sum + review.rating, 0
+  );
 
   return {
     averageRating: recipeReviews.length
@@ -348,8 +427,11 @@ app.get("/", (req, res) => {
   res.json({
     success: true,
     message: "RecipeBox API is running",
-    version: "3.0.0",
+    version: "3.1.0",
     storage: "JSON file",
+    imageUpload: true,
+    maxImageSize: "5MB",
+    allowedImageTypes: ["JPG", "PNG", "WebP"],
     endpoints: {
       health: "/health",
       recipes: "/recipes",
@@ -359,7 +441,9 @@ app.get("/", (req, res) => {
       reviews: "/recipes/:id/reviews",
       shoppingList: "/shopping-list",
       recipeIngredients: "/shopping-list/recipe/:id",
-      feedback: "/feedback"
+      feedback: "/feedback",
+      upload: "/upload",
+      uploadedImages: "/uploads/:filename"
     }
   });
 });
@@ -370,7 +454,58 @@ app.get("/health", (req, res) => {
     status: "healthy",
     recipes: recipes.length,
     shoppingItems: shoppingList.length,
-    reviews: reviews.length
+    reviews: reviews.length,
+    uploadedImages: fs.existsSync(UPLOAD_DIR)
+      ? fs.readdirSync(UPLOAD_DIR).length
+      : 0
+  });
+});
+
+// =====================================================
+// IMAGE UPLOAD API
+// =====================================================
+
+// POST /upload
+// Content-Type: multipart/form-data
+// Field name: image
+
+app.post("/upload", (req, res) => {
+  upload.single("image")(req, res, (error) => {
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: error instanceof multer.MulterError &&
+          error.code === "LIMIT_FILE_SIZE"
+          ? "Image size must not exceed 5MB."
+          : error.message || "Image upload failed."
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "Please select an image to upload."
+      });
+    }
+
+    const baseUrl = process.env.PUBLIC_BASE_URL
+      ? process.env.PUBLIC_BASE_URL.replace(/\/+$/, "")
+      : `${req.protocol}://${req.get("host")}`;
+
+    const imageUrl =
+      `${baseUrl}/uploads/${encodeURIComponent(req.file.filename)}`;
+
+    return res.status(201).json({
+      success: true,
+      message: "Image uploaded successfully.",
+      image: {
+        filename: req.file.filename,
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        size: req.file.size,
+        imageUrl
+      }
+    });
   });
 });
 
@@ -393,10 +528,14 @@ app.get("/recipes", (req, res) => {
       recipe.description,
       ...(recipe.tags || []),
       ingredients
-    ].some(value => String(value || "").toLowerCase().includes(q));
+    ].some(value =>
+      String(value || "").toLowerCase().includes(q)
+    );
 
     const matchesTag = !tag ||
-      (recipe.tags || []).some(item => item.toLowerCase() === tag);
+      (recipe.tags || []).some(item =>
+        item.toLowerCase() === tag
+      );
 
     return matchesQuery && matchesTag;
   });
@@ -436,7 +575,10 @@ app.post("/recipes", (req, res) => {
       recipe: recipeWithRating(recipe)
     });
   } catch (error) {
-    return res.status(400).json({ success: false, message: error.message });
+    return res.status(400).json({
+      success: false,
+      message: error.message
+    });
   }
 });
 
@@ -454,7 +596,9 @@ app.put("/recipes/:id", findRecipe, (req, res) => {
       updatedAt: new Date().toISOString()
     };
 
-    recipes = recipes.map(item => item.id === old.id ? updated : item);
+    recipes = recipes.map(item =>
+      item.id === old.id ? updated : item
+    );
 
     return persist(res, 200, {
       success: true,
@@ -462,7 +606,10 @@ app.put("/recipes/:id", findRecipe, (req, res) => {
       recipe: recipeWithRating(updated)
     });
   } catch (error) {
-    return res.status(400).json({ success: false, message: error.message });
+    return res.status(400).json({
+      success: false,
+      message: error.message
+    });
   }
 });
 
@@ -471,7 +618,9 @@ app.delete("/recipes/:id", findRecipe, (req, res) => {
 
   recipes = recipes.filter(item => item.id !== recipe.id);
   reviews = reviews.filter(item => item.recipeId !== recipe.id);
-  shoppingList = shoppingList.filter(item => item.recipeId !== recipe.id);
+  shoppingList = shoppingList.filter(item =>
+    item.recipeId !== recipe.id
+  );
 
   return persist(res, 200, {
     success: true,
@@ -489,7 +638,11 @@ app.get("/favorites", (req, res) => {
     .filter(recipe => recipe.favorite === true)
     .map(recipeWithRating);
 
-  res.json({ success: true, count: favorites.length, recipes: favorites });
+  res.json({
+    success: true,
+    count: favorites.length,
+    recipes: favorites
+  });
 });
 
 app.put("/recipes/:id/favorite", findRecipe, (req, res) => {
@@ -523,11 +676,12 @@ app.patch("/recipes/:id/favorite", findRecipe, (req, res) => {
 // COMMENTS AND STAR RATINGS
 // =====================================================
 
-// GET /recipes/1/reviews
 app.get("/recipes/:id/reviews", findRecipe, (req, res) => {
   const items = reviews
     .filter(review => review.recipeId === req.recipe.id)
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    .sort((a, b) =>
+      new Date(b.createdAt) - new Date(a.createdAt)
+    );
 
   res.json({
     success: true,
@@ -538,8 +692,6 @@ app.get("/recipes/:id/reviews", findRecipe, (req, res) => {
   });
 });
 
-// POST /recipes/1/reviews
-// Body: { "name": "Alex", "rating": 5, "comment": "Great recipe!" }
 app.post("/recipes/:id/reviews", findRecipe, (req, res) => {
   const name = cleanText(req.body.name, 80) || "Anonymous";
   const comment = cleanText(req.body.comment, 2000);
@@ -578,8 +730,7 @@ app.post("/recipes/:id/reviews", findRecipe, (req, res) => {
   });
 });
 
-// DELETE /reviews/1
-// Note: protect this endpoint with authentication before public deployment.
+// DELETE /reviews/:reviewId
 app.delete("/reviews/:reviewId", (req, res) => {
   const id = validId(req.params.reviewId);
 
@@ -696,7 +847,9 @@ app.put("/shopping-list/:id", (req, res) => {
     item.name = cleanName;
   }
 
-  if (amount !== undefined) item.amount = cleanText(amount, 100);
+  if (amount !== undefined) {
+    item.amount = cleanText(amount, 100);
+  }
 
   if (checked !== undefined) {
     if (typeof checked !== "boolean") {
@@ -744,7 +897,6 @@ app.delete("/shopping-list/:id", (req, res) => {
   });
 });
 
-// POST /shopping-list/recipe/1
 app.post("/shopping-list/recipe/:id", findRecipe, (req, res) => {
   const added = [];
 
@@ -858,6 +1010,13 @@ app.use((error, req, res, next) => {
     });
   }
 
+  if (error instanceof multer.MulterError) {
+    return res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+
   return res.status(500).json({
     success: false,
     message: "Internal server error."
@@ -873,11 +1032,13 @@ try {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log("=================================");
-    console.log("RecipeBox API v3.0.0");
+    console.log("RecipeBox API v3.1.0");
     console.log(`Port: ${PORT}`);
     console.log(`Storage: ${DATA_FILE}`);
+    console.log(`Image storage: ${UPLOAD_DIR}`);
     console.log(`Recipes: ${recipes.length}`);
     console.log(`Reviews: ${reviews.length}`);
+    console.log("Image uploads enabled.");
     console.log("Comments and ratings enabled.");
     console.log("=================================");
   });

@@ -1,0 +1,250 @@
+{
+  "recipes": [
+    {
+      "id": 1,
+      "title": "Chicken Fried Rice",
+      "description": "A delicious and easy chicken fried rice recipe.",
+      "imageUrl": "https://nourishingniki.com/wp-content/uploads/2024/08/shrimp-and-chicken-fried-rice-3-scaled.jpg",
+      "servings": 2,
+      "cookingTime": 25,
+      "tags": [
+        "chicken",
+        "rice",
+        "quick",
+        "asian"
+      ],
+      "ingredients": [
+        {
+          "id": 1,
+          "name": "Chicken breast",
+          "amount": "200g"
+        },
+        {
+          "id": 2,
+          "name": "Cooked rice",
+          "amount": "2 cups"
+        },
+        {
+          "id": 3,
+          "name": "Eggs",
+          "amount": "2"
+        },
+        {
+          "id": 4,
+          "name": "Soy sauce",
+          "amount": "2 tbsp"
+        },
+        {
+          "id": 5,
+          "name": "Cooking oil",
+          "amount": "1 tbsp"
+        },
+        {
+          "id": 6,
+          "name": "Garlic",
+          "amount": "2 cloves"
+        }
+      ],
+      "steps": [
+        {
+          "id": 1,
+          "description": "Cut the chicken into small pieces."
+        },
+        {
+          "id": 2,
+          "description": "Heat oil in a large pan."
+        },
+        {
+          "id": 3,
+          "description": "Cook the chicken until fully cooked."
+        },
+        {
+          "id": 4,
+          "description": "Add garlic and cook for 30 seconds."
+        },
+        {
+          "id": 5,
+          "description": "Add the cooked rice and stir well."
+        },
+        {
+          "id": 6,
+          "description": "Add eggs and mix everything together."
+        },
+        {
+          "id": 7,
+          "description": "Add soy sauce and stir-fry for several minutes."
+        },
+        {
+          "id": 8,
+          "description": "Serve hot."
+        }
+      ],
+      "favorite": false
+    },
+    {
+      "id": 2,
+      "title": "Spaghetti Carbonara",
+      "description": "Creamy Italian-style spaghetti carbonara.",
+      "imageUrl": "https://images.unsplash.com/photo-1612874742237-6526221588e3",
+      "servings": 2,
+      "cookingTime": 20,
+      "tags": [
+        "pasta",
+        "italian",
+        "quick"
+      ],
+      "ingredients": [
+        {
+          "id": 1,
+          "name": "Spaghetti",
+          "amount": "200g"
+        },
+        {
+          "id": 2,
+          "name": "Eggs",
+          "amount": "2"
+        },
+        {
+          "id": 3,
+          "name": "Parmesan cheese",
+          "amount": "50g"
+        },
+        {
+          "id": 4,
+          "name": "Bacon",
+          "amount": "100g"
+        },
+        {
+          "id": 5,
+          "name": "Black pepper",
+          "amount": "1 tsp"
+        }
+      ],
+      "steps": [
+        {
+          "id": 1,
+          "description": "Cook spaghetti according to package instructions."
+        },
+        {
+          "id": 2,
+          "description": "Cook bacon in a pan until crispy."
+        },
+        {
+          "id": 3,
+          "description": "Mix eggs and Parmesan cheese in a bowl."
+        },
+        {
+          "id": 4,
+          "description": "Drain spaghetti, reserving some pasta water."
+        },
+        {
+          "id": 5,
+          "description": "Mix hot spaghetti with bacon."
+        },
+        {
+          "id": 6,
+          "description": "Remove from heat and add the egg mixture."
+        },
+        {
+          "id": 7,
+          "description": "Add pasta water if needed and mix until creamy."
+        },
+        {
+          "id": 8,
+          "description": "Add black pepper and serve."
+        }
+      ],
+      "favorite": false
+    },
+    {
+      "id": 3,
+      "title": "Beef Burger",
+      "description": "Juicy homemade beef burger with fresh vegetables.",
+      "imageUrl": "https://images.unsplash.com/photo-1568901346375-23c9450c58cd",
+      "servings": 2,
+      "cookingTime": 30,
+      "tags": [
+        "beef",
+        "burger",
+        "american"
+      ],
+      "ingredients": [
+        {
+          "id": 1,
+          "name": "Ground beef",
+          "amount": "300g"
+        },
+        {
+          "id": 2,
+          "name": "Burger buns",
+          "amount": "2"
+        },
+        {
+          "id": 3,
+          "name": "Cheese",
+          "amount": "2 slices"
+        },
+        {
+          "id": 4,
+          "name": "Lettuce",
+          "amount": "2 leaves"
+        },
+        {
+          "id": 5,
+          "name": "Tomato",
+          "amount": "1"
+        },
+        {
+          "id": 6,
+          "name": "Salt",
+          "amount": "1 tsp"
+        },
+        {
+          "id": 7,
+          "name": "Black pepper",
+          "amount": "1/2 tsp"
+        }
+      ],
+      "steps": [
+        {
+          "id": 1,
+          "description": "Form ground beef into burger patties."
+        },
+        {
+          "id": 2,
+          "description": "Season both sides with salt and pepper."
+        },
+        {
+          "id": 3,
+          "description": "Heat a pan or grill."
+        },
+        {
+          "id": 4,
+          "description": "Cook patties until fully cooked."
+        },
+        {
+          "id": 5,
+          "description": "Add cheese during the final minute."
+        },
+        {
+          "id": 6,
+          "description": "Toast the burger buns."
+        },
+        {
+          "id": 7,
+          "description": "Add lettuce and tomato."
+        },
+        {
+          "id": 8,
+          "description": "Place the patty inside the bun and serve."
+        }
+      ],
+      "favorite": false
+    }
+  ],
+  "shoppingList": [],
+  "feedback": [],
+  "reviews": [],
+  "nextFeedbackId": 1,
+  "nextReviewId": 1
+}
