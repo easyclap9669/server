@@ -1,4 +1,3 @@
-
 require("dotenv").config();
 
 const express = require("express");
@@ -24,9 +23,8 @@ app.use(cors());
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 
-// Set true when deployed behind a trusted proxy such as Render.
-// Configure according to your hosting environment.
-if (process.env.TRUST_PROXY === "true") {
+// Render sits behind a proxy, so trust it to get the correct protocol/host.
+if (process.env.TRUST_PROXY === "true" || process.env.RENDER) {
   app.set("trust proxy", 1);
 }
 
@@ -38,8 +36,10 @@ fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const ALLOWED_MIME_TYPES = {
   "image/jpeg": ".jpg",
+  "image/jpg": ".jpg",
   "image/png": ".png",
-  "image/webp": ".webp"
+  "image/webp": ".webp",
+  "image/gif": ".gif"
 };
 
 const storage = multer.diskStorage({
@@ -48,10 +48,10 @@ const storage = multer.diskStorage({
   },
 
   filename: (req, file, cb) => {
-    const extension = ALLOWED_MIME_TYPES[file.mimetype];
+    const extension = ALLOWED_MIME_TYPES[file.mimetype.toLowerCase()];
 
     if (!extension) {
-      return cb(new Error("Only JPG, PNG, and WebP images are allowed."));
+      return cb(new Error("Only JPG, PNG, WebP, and GIF images are allowed."));
     }
 
     cb(null, `${crypto.randomUUID()}${extension}`);
@@ -66,13 +66,42 @@ const upload = multer({
   },
 
   fileFilter: (req, file, cb) => {
-    if (!ALLOWED_MIME_TYPES[file.mimetype]) {
-      return cb(new Error("Only JPG, PNG, and WebP images are allowed."));
+    if (!ALLOWED_MIME_TYPES[file.mimetype.toLowerCase()]) {
+      return cb(new Error("Only JPG, PNG, WebP, and GIF images are allowed."));
     }
 
     cb(null, true);
   }
 });
+
+// Check the real file signature, not just the declared MIME type.
+function hasValidImageSignature(filePath) {
+  let fd;
+
+  try {
+    fd = fs.openSync(filePath, "r");
+    const buf = Buffer.alloc(12);
+    fs.readSync(fd, buf, 0, 12, 0);
+
+    const isJpeg = buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
+    const isPng =
+      buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47;
+    const isGif = buf.toString("ascii", 0, 4) === "GIF8";
+    const isWebp =
+      buf.toString("ascii", 0, 4) === "RIFF" &&
+      buf.toString("ascii", 8, 12) === "WEBP";
+
+    return isJpeg || isPng || isGif || isWebp;
+  } catch {
+    return false;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
+function safeDeleteFile(filePath) {
+  fs.unlink(filePath, () => {});
+}
 
 // Serve uploaded photos.
 app.use("/uploads", express.static(UPLOAD_DIR, {
@@ -84,6 +113,49 @@ app.use("/uploads", express.static(UPLOAD_DIR, {
     res.setHeader("X-Content-Type-Options", "nosniff");
   }
 }));
+
+function getBaseUrl(req) {
+  if (process.env.PUBLIC_BASE_URL) {
+    return process.env.PUBLIC_BASE_URL.replace(/\/+$/, "");
+  }
+
+  const host = req.get("host");
+  const isLocal = /^(localhost|127\.|10\.|192\.168\.)/.test(host || "");
+  const protocol = isLocal ? req.protocol : "https";
+
+  return `${protocol}://${host}`;
+}
+
+// Returns the filename if the URL points to one of our uploaded images.
+function uploadedFilenameFromUrl(url) {
+  if (typeof url !== "string") return null;
+
+  const match = url.match(/\/uploads\/([^/?#]+)$/);
+  if (!match) return null;
+
+  try {
+    const filename = path.basename(decodeURIComponent(match[1]));
+    return /^[a-zA-Z0-9-]+\.(jpg|png|webp|gif)$/i.test(filename)
+      ? filename
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+// Delete an uploaded image only if no recipe still uses it.
+function deleteUploadedImageIfUnused(url) {
+  const filename = uploadedFilenameFromUrl(url);
+  if (!filename) return;
+
+  const stillUsed = recipes.some(
+    recipe => uploadedFilenameFromUrl(recipe.imageUrl) === filename
+  );
+
+  if (!stillUsed) {
+    safeDeleteFile(path.join(UPLOAD_DIR, filename));
+  }
+}
 
 // =====================================================
 // INITIAL RECIPES
@@ -308,7 +380,8 @@ function normalizeIngredients(items) {
     .map((item, index) => ({
       id: index + 1,
       name: cleanText(item?.name, 150),
-      amount: cleanText(item?.amount, 100)
+      amount: cleanText(item?.amount, 100),
+      unit: cleanText(item?.unit, 50)
     }))
     .filter(item => item.name);
 }
@@ -319,6 +392,7 @@ function normalizeSteps(items) {
   return items.slice(0, 200)
     .map((item, index) => ({
       id: index + 1,
+      number: index + 1,
       description: cleanText(item?.description, 2000)
     }))
     .filter(item => item.description);
@@ -347,6 +421,7 @@ function normalizeRecipeInput(body, oldRecipe = {}) {
     throw new Error("Cooking time must be a non-negative integer.");
   }
 
+  // null or "" clears the image; undefined keeps the old one.
   const imageUrl = body.imageUrl === undefined
     ? oldRecipe.imageUrl || ""
     : cleanText(body.imageUrl, 2048);
@@ -427,11 +502,11 @@ app.get("/", (req, res) => {
   res.json({
     success: true,
     message: "RecipeBox API is running",
-    version: "3.1.0",
+    version: "3.2.0",
     storage: "JSON file",
     imageUpload: true,
     maxImageSize: "5MB",
-    allowedImageTypes: ["JPG", "PNG", "WebP"],
+    allowedImageTypes: ["JPG", "PNG", "WebP", "GIF"],
     endpoints: {
       health: "/health",
       recipes: "/recipes",
@@ -443,6 +518,8 @@ app.get("/", (req, res) => {
       recipeIngredients: "/shopping-list/recipe/:id",
       feedback: "/feedback",
       upload: "/upload",
+      uploadIngredientImage: "/upload/ingredient-image",
+      uploadRecipeImage: "/upload/recipe-image",
       uploadedImages: "/uploads/:filename"
     }
   });
@@ -466,10 +543,12 @@ app.get("/health", (req, res) => {
 // =====================================================
 
 // POST /upload
+// POST /upload/ingredient-image   (used by the Android app)
+// POST /upload/recipe-image
 // Content-Type: multipart/form-data
 // Field name: image
 
-app.post("/upload", (req, res) => {
+function handleImageUpload(req, res) {
   upload.single("image")(req, res, (error) => {
     if (error) {
       return res.status(400).json({
@@ -488,17 +567,26 @@ app.post("/upload", (req, res) => {
       });
     }
 
-    const baseUrl = process.env.PUBLIC_BASE_URL
-      ? process.env.PUBLIC_BASE_URL.replace(/\/+$/, "")
-      : `${req.protocol}://${req.get("host")}`;
+    if (!hasValidImageSignature(req.file.path)) {
+      safeDeleteFile(req.file.path);
+
+      return res.status(400).json({
+        success: false,
+        message: "The uploaded file is not a valid image."
+      });
+    }
 
     const imageUrl =
-      `${baseUrl}/uploads/${encodeURIComponent(req.file.filename)}`;
+      `${getBaseUrl(req)}/uploads/${encodeURIComponent(req.file.filename)}`;
 
+    // imageUrl, url and image are all plain strings so any client can read them.
     return res.status(201).json({
       success: true,
       message: "Image uploaded successfully.",
-      image: {
+      imageUrl,
+      url: imageUrl,
+      image: imageUrl,
+      file: {
         filename: req.file.filename,
         originalName: req.file.originalname,
         mimeType: req.file.mimetype,
@@ -507,7 +595,12 @@ app.post("/upload", (req, res) => {
       }
     });
   });
-});
+}
+
+app.post(
+  ["/upload", "/upload/ingredient-image", "/upload/recipe-image"],
+  handleImageUpload
+);
 
 // =====================================================
 // RECIPES: SEARCH, FILTER, READ, CREATE, UPDATE, DELETE
@@ -600,6 +693,11 @@ app.put("/recipes/:id", findRecipe, (req, res) => {
       item.id === old.id ? updated : item
     );
 
+    // Remove the old uploaded photo if it was replaced or removed.
+    if (old.imageUrl && old.imageUrl !== updated.imageUrl) {
+      deleteUploadedImageIfUnused(old.imageUrl);
+    }
+
     return persist(res, 200, {
       success: true,
       message: "Recipe updated successfully.",
@@ -621,6 +719,8 @@ app.delete("/recipes/:id", findRecipe, (req, res) => {
   shoppingList = shoppingList.filter(item =>
     item.recipeId !== recipe.id
   );
+
+  deleteUploadedImageIfUnused(recipe.imageUrl);
 
   return persist(res, 200, {
     success: true,
@@ -1032,7 +1132,7 @@ try {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log("=================================");
-    console.log("RecipeBox API v3.1.0");
+    console.log("RecipeBox API v3.2.0");
     console.log(`Port: ${PORT}`);
     console.log(`Storage: ${DATA_FILE}`);
     console.log(`Image storage: ${UPLOAD_DIR}`);
